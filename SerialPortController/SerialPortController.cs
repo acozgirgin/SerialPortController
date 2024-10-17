@@ -14,15 +14,9 @@ namespace Developer
     public class SerialPortController
     {
         #region Class Properties
-        private SerialPort? _serialPort;
-        private Stream? _bufferStream;
+        private SerialPort _serialPort;
 
-        private static int BUFFER_SIZE = 128; // Max okunacak byte sayisi
-
-        private static int PACKET_SIZE = 2; // Her 2 byte okundugunda asyncallback tetiklenir.
-
-        public volatile bool READ_FLAG = false;
-
+        private volatile bool READ_FLAG = false;
 
         public int BaudRate { get; set; }
         public Parity Parity { get; set; }
@@ -84,11 +78,7 @@ namespace Developer
                 _serialPort.ReadBufferSize = 4096;
                 _serialPort.WriteBufferSize = 4096;
                 _serialPort.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
-
                 _serialPort.Open();
-
-                // Initialize the buffer stream
-                _bufferStream = _serialPort.BaseStream;
 
             }
 
@@ -126,22 +116,17 @@ namespace Developer
                 }
 
 
-                var message = Encoding.ASCII.GetString(Buffer.ToArray());
+                //var message = Encoding.ASCII.GetString(Buffer.ToArray());
+                //Console.WriteLine($"Buffer data: {message} ");
+                //Console.WriteLine("Enter a value to continue (Y/N)");
+                //Console.ReadLine();
 
-                Console.WriteLine($"Buffer data: {message} ");
-
-                Buffer.Clear();
-
-                Console.WriteLine("Enter a value to continue (Y/N)");
-                Console.ReadLine();
-
+                sw.Stop();
+                READ_FLAG = false;
+                return Encoding.ASCII.GetString(Buffer.ToArray());
             }
 
-            sw.Stop();
-
-            READ_FLAG = false;
-
-            return Encoding.ASCII.GetString(Buffer.ToArray());
+            return "Serial Port Read Timeout !!!!";
         } 
 
         private void DataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
@@ -156,11 +141,12 @@ namespace Developer
             }
         }
 
-        public async Task<string> Drive(string message , int timeout)
+        public async Task<string> SendAndGetResponse(string message , int timeout)
         {
             //reset flag
             READ_FLAG = false;
             WriteData(message);
+            Buffer.Clear();
             return await AsyncReadBuffer(timeout);
         }
         #endregion

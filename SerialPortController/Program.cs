@@ -33,7 +33,11 @@ var serialPort = new SerialPortController(
 //);
 
 
-var result = Task.Run(() => serialPort.Drive(message: "TEST TEST TEST BABY YASUO \r\n", timeout: 300)  );
+var result = Task.Run(async() =>
+{
+     var response = await serialPort.SendAndGetResponse(message: "TEST TEST TEST BABY YASUO \r\n", timeout: 5000);
+     Console.WriteLine(response);
+});
 
 while (true)
 {
