@@ -156,12 +156,12 @@ namespace Developer
             }
         }
 
-        public async Task<string> Drive(string message)
+        public async Task<string> Drive(string message , int timeout)
         {
             //reset flag
             READ_FLAG = false;
             WriteData(message);
-            return await AsyncReadBuffer(timeout: 3000);
+            return await AsyncReadBuffer(timeout);
         }
         #endregion
 

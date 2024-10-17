@@ -33,7 +33,7 @@ var serialPort = new SerialPortController(
 //);
 
 
-var result = Task.Run(() => serialPort.Drive("TEST TEST TEST BABY YASUO \r\n") );
+var result = Task.Run(() => serialPort.Drive(message: "TEST TEST TEST BABY YASUO \r\n", timeout: 300)  );
 
 while (true)
 {
