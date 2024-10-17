@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using System.IO.Ports;
 using System.IO;
 using System.Threading;
+using System.Diagnostics;
+using System.Threading.Channels;
 
 namespace Developer
 {
@@ -15,11 +17,12 @@ namespace Developer
         private SerialPort? _serialPort;
         private Stream? _bufferStream;
 
-        private static int BUFFER_SIZE = 240;
+        private static int BUFFER_SIZE = 128; // Max okunacak byte sayisi
 
-        private static int PACKET_SIZE = 12;
+        private static int PACKET_SIZE = 2; // Her 2 byte okundugunda asyncallback tetiklenir.
 
-        public CancellationTokenSource _cancellationTokenSource;
+        public volatile bool READ_FLAG = false;
+
 
         public int BaudRate { get; set; }
         public Parity Parity { get; set; }
@@ -27,10 +30,9 @@ namespace Developer
         public int DataBits { get; set; }
         public string ComPort { get; set; }
 
-        public byte[] buffer;
+        public List<byte> Buffer = new();
 
-        public List<byte> bufferAsync;
-
+        public delegate void WriteAndRead(string message);
         #endregion
 
 
@@ -54,9 +56,12 @@ namespace Developer
             this.Parity = parity;
             this.StopBits = stopBits;
             this.ComPort = comPort;
+
             OpenPort();
+
             _serialPort.WriteTimeout = writeTimeOut; // defualt 500 ms WriteTimeOut
             _serialPort.ReadTimeout = readTimeOut; // defualt 500 ms WriteTimeOut
+
         }
 
         #endregion
@@ -78,17 +83,13 @@ namespace Developer
                 _serialPort.Handshake = Handshake.None;
                 _serialPort.ReadBufferSize = 4096;
                 _serialPort.WriteBufferSize = 4096;
-                _serialPort.Open();
+                _serialPort.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
 
-                // Initialize array and list buffers 
-                buffer = new byte[BUFFER_SIZE];
-                bufferAsync = new List<byte>();
+                _serialPort.Open();
 
                 // Initialize the buffer stream
                 _bufferStream = _serialPort.BaseStream;
 
-                // Initialize the CancellationTokenSource
-                _cancellationTokenSource = new CancellationTokenSource();
             }
 
             catch (IOException ex)
@@ -109,57 +110,59 @@ namespace Developer
 
         }
 
-        public void StartAsyncRead()
+        public void WriteData(string message) => _serialPort.WriteLine(message);
+
+        public async Task<string> AsyncReadBuffer(int timeout)
         {
-            if (_cancellationTokenSource.IsCancellationRequested)
+
+            var sw = Stopwatch.StartNew();
+
+            while (sw.ElapsedMilliseconds < timeout)
             {
-                return;
-            }
 
-            _bufferStream.BeginRead(buffer, 0, PACKET_SIZE, new AsyncCallback(ReadCallback), null);
-        }
-
-        public void StopAsyncRead() => _cancellationTokenSource.Cancel();
-
-        private async void ReadCallback(IAsyncResult ar)
-        {
-            //Calculate offset value to write buffer index
-
-            try
-            {
-                var result = await Task.Run(() => _bufferStream.ReadAsync(buffer, offset: 0, count: PACKET_SIZE));
-
-                //Add byte list asynch buffer
-                bufferAsync.AddRange(Array.FindAll(buffer, val => val is not 0));
-
-
-                //Check bufferAsync List
-                if (bufferAsync.Count >= BUFFER_SIZE)
+                if (!READ_FLAG)
                 {
-                    await _bufferStream.FlushAsync();
-
-                    bufferAsync.Clear();
-
-                    Console.WriteLine("Buffer limit exceeded.");
-
-
-                    //Fill buffer with zeros again
-                    for (int i = 0; i < buffer.Length; ++i) buffer[i] = 0;
-
+                    continue;
                 }
 
-                //Start async read again
-                StartAsyncRead();
+
+                var message = Encoding.ASCII.GetString(Buffer.ToArray());
+
+                Console.WriteLine($"Buffer data: {message} ");
+
+                Buffer.Clear();
+
+                Console.WriteLine("Enter a value to continue (Y/N)");
+                Console.ReadLine();
 
             }
-            catch (TimeoutException)
+
+            sw.Stop();
+
+            READ_FLAG = false;
+
+            return Encoding.ASCII.GetString(Buffer.ToArray());
+        } 
+
+        private void DataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
+        {
+  
+            Buffer.AddRange(Encoding.ASCII.GetBytes(_serialPort.ReadExisting()));
+
+            //line feed char geldiginde flag kontrol edilerek veri okunur
+            if (Buffer.Any(val => val == 0x0A))
             {
-                StartAsyncRead();
+                READ_FLAG = true;
             }
-
-
         }
 
+        public async Task<string> Drive(string message)
+        {
+            //reset flag
+            READ_FLAG = false;
+            WriteData(message);
+            return await AsyncReadBuffer(timeout: 3000);
+        }
         #endregion
 
 
